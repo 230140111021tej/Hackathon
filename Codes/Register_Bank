@@ -1,0 +1,49 @@
+module register_bank #(
+    parameter WIDTH = 12
+)(
+    input  wire clk,
+    input  wire rst,
+
+    input  wire write_enable,
+
+    input  wire [WIDTH-1:0] duty_a_in,
+    input  wire [WIDTH-1:0] duty_b_in,
+    input  wire [WIDTH-1:0] duty_c_in,
+
+    input  wire [WIDTH-1:0] freq_in,
+    input  wire [WIDTH-1:0] deadtime_in,
+
+    input  wire control_in,
+
+    output reg [WIDTH-1:0] duty_a,
+    output reg [WIDTH-1:0] duty_b,
+    output reg [WIDTH-1:0] duty_c,
+
+    output reg [WIDTH-1:0] freq_div,
+    output reg [WIDTH-1:0] deadtime,
+
+    output reg control_reg
+);
+
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        duty_a <= 0;
+        duty_b <= 0;
+        duty_c <= 0;
+        freq_div <= 0;
+        deadtime <= 0;
+        control_reg <= 0;
+    end
+    else if (write_enable) begin
+        duty_a <= duty_a_in;
+        duty_b <= duty_b_in;
+        duty_c <= duty_c_in;
+
+        freq_div <= freq_in;
+        deadtime <= deadtime_in;
+
+        control_reg <= control_in;
+    end
+end
+
+endmodule
