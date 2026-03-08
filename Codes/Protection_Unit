@@ -1,0 +1,22 @@
+module protection_unit (
+    input  wire clk,
+    input  wire rst,
+
+    input  wire overcurrent,
+    input  wire emergency_stop,
+    input  wire system_enable,
+
+    output reg fault_detect
+);
+
+always @(posedge clk or posedge rst) begin
+    if (rst)
+        fault_detect <= 1'b0;
+
+    else if (overcurrent || emergency_stop)
+        fault_detect <= 1'b1;
+
+    else if (system_enable)
+        fault_detect <= 1'b0;
+end
+endmodule
