@@ -1,0 +1,36 @@
+module compare_logic #(
+    parameter WIDTH = 12
+)(
+    input  wire [WIDTH-1:0] counter,
+    input  wire [WIDTH-1:0] duty_a,
+    input  wire [WIDTH-1:0] duty_b,
+    input  wire [WIDTH-1:0] duty_c,
+
+    output reg pwm_a_raw,
+    output reg pwm_b_raw,
+    output reg pwm_c_raw
+);
+
+always @(*) begin
+
+    // Phase A comparison
+    if(counter < duty_a)
+        pwm_a_raw = 1'b1;
+    else
+        pwm_a_raw = 1'b0;
+
+    // Phase B comparison
+    if(counter < duty_b)
+        pwm_b_raw = 1'b1;
+    else
+        pwm_b_raw = 1'b0;
+
+    // Phase C comparison
+    if(counter < duty_c)
+        pwm_c_raw = 1'b1;
+    else
+        pwm_c_raw = 1'b0;
+
+end
+
+endmodule
