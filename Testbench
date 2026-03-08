@@ -1,0 +1,260 @@
+`include "h.v"
+`timescale 1ns/1ps
+
+module motor_control_tb;
+
+parameter WIDTH = 12;
+
+/////////////////////////////////////////////////
+// Testbench Signals
+/////////////////////////////////////////////////
+
+reg clk;
+reg rst;
+
+reg start;
+reg emergency_stop;
+reg overcurrent;
+
+reg write_enable;
+
+reg [WIDTH-1:0] duty_a_in;
+reg [WIDTH-1:0] duty_b_in;
+reg [WIDTH-1:0] duty_c_in;
+
+reg [WIDTH-1:0] freq_in;
+reg [WIDTH-1:0] deadtime_in;
+
+wire fault_flag;
+
+wire pwm_a_high;
+wire pwm_a_low;
+wire pwm_b_high;
+wire pwm_b_low;
+wire pwm_c_high;
+wire pwm_c_low;
+
+/////////////////////////////////////////////////
+// DUT
+/////////////////////////////////////////////////
+
+motor_control_top #(
+    WIDTH
+)
+dut (
+
+    clk,
+    rst,
+
+    start,
+    emergency_stop,
+    overcurrent,
+
+    write_enable,
+
+    duty_a_in,
+    duty_b_in,
+    duty_c_in,
+
+    freq_in,
+    deadtime_in,
+
+    fault_flag,
+
+    pwm_a_high,
+    pwm_a_low,
+    pwm_b_high,
+    pwm_b_low,
+    pwm_c_high,
+    pwm_c_low
+);
+
+/////////////////////////////////////////////////
+// Dump Waveform
+/////////////////////////////////////////////////
+
+initial begin
+    $dumpfile("motor_control.vcd");
+    $dumpvars(0, motor_control_tb);
+end
+
+/////////////////////////////////////////////////
+// Monitor Important Signals
+/////////////////////////////////////////////////
+
+initial begin
+    $monitor(
+        "TIME=%0t START=%b FAULT=%b PWM_A=%b PWM_B=%b PWM_C=%b",
+        $time,
+        start,
+        fault_flag,
+        pwm_a_high,
+        pwm_b_high,
+        pwm_c_high
+    );
+end
+
+/////////////////////////////////////////////////
+// Clock Generation
+/////////////////////////////////////////////////
+
+initial begin
+    clk = 0;
+    forever #5 clk = ~clk;
+end
+
+/////////////////////////////////////////////////
+// Test Sequence
+/////////////////////////////////////////////////
+
+initial begin
+
+/////////////////////////////////////////////////
+// Initial Reset
+/////////////////////////////////////////////////
+
+rst = 1;
+start = 0;
+emergency_stop = 0;
+overcurrent = 0;
+write_enable = 0;
+
+duty_a_in = 0;
+duty_b_in = 0;
+duty_c_in = 0;
+
+freq_in = 100;
+deadtime_in = 5;
+
+#20;
+rst = 0;
+
+/////////////////////////////////////////////////
+// Load Configuration
+/////////////////////////////////////////////////
+
+write_enable = 1;
+
+duty_a_in = 50;
+duty_b_in = 30;
+duty_c_in = 70;
+
+freq_in = 120;
+deadtime_in = 10;
+
+#10;
+write_enable = 0;
+
+/////////////////////////////////////////////////
+// Start Motor
+/////////////////////////////////////////////////
+
+start = 1;
+
+#200;
+
+/////////////////////////////////////////////////
+// Change Duty Cycle While Running
+/////////////////////////////////////////////////
+
+write_enable = 1;
+
+duty_a_in = 10;
+duty_b_in = 90;
+duty_c_in = 40;
+
+#10;
+
+write_enable = 0;
+
+#200;
+
+/////////////////////////////////////////////////
+// Extreme Frequency Change
+/////////////////////////////////////////////////
+
+write_enable = 1;
+
+freq_in = 20;
+
+#10;
+
+write_enable = 0;
+
+#200;
+
+/////////////////////////////////////////////////
+// Overcurrent Fault Test
+/////////////////////////////////////////////////
+
+overcurrent = 1;
+
+#50;
+
+overcurrent = 0;
+
+#100;
+
+/////////////////////////////////////////////////
+// Emergency Stop Test
+/////////////////////////////////////////////////
+
+emergency_stop = 1;
+
+#50;
+
+emergency_stop = 0;
+
+#100;
+
+/////////////////////////////////////////////////
+// Restart After Fault
+/////////////////////////////////////////////////
+
+start = 0;
+
+#50;
+
+start = 1;
+
+#200;
+
+/////////////////////////////////////////////////
+// Worst Case Duty Cycle
+/////////////////////////////////////////////////
+
+write_enable = 1;
+
+duty_a_in = 0;
+duty_b_in = 4095;
+duty_c_in = 2048;
+
+#10;
+
+write_enable = 0;
+
+#200;
+
+/////////////////////////////////////////////////
+// Deadtime Stress
+/////////////////////////////////////////////////
+
+write_enable = 1;
+
+deadtime_in = 50;
+
+#10;
+
+write_enable = 0;
+
+#200;
+
+/////////////////////////////////////////////////
+// Stop Simulation
+/////////////////////////////////////////////////
+
+$finish;
+
+end
+
+endmodule
