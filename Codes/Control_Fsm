@@ -1,0 +1,92 @@
+module control_fsm(
+    input  wire clk,
+    input  wire rst,
+
+    input  wire start,
+    input  wire fault_detect,
+
+    output reg pwm_enable,
+    output reg fault_flag
+);
+
+reg [1:0] current_state;
+reg [1:0] next_state;
+
+parameter IDLE  = 2'b00;
+parameter RUN   = 2'b01;
+parameter FAULT = 2'b10;
+parameter RESET = 2'b11;
+
+/////////////////////////////////////////////////
+// State register
+/////////////////////////////////////////////////
+
+always @(posedge clk or posedge rst) begin
+    if (rst)
+        current_state <= IDLE;
+    else
+        current_state <= next_state;
+end
+
+/////////////////////////////////////////////////
+// Next state logic
+/////////////////////////////////////////////////
+
+always @(*) begin
+    case(current_state)
+
+        IDLE:
+            if(start)
+                next_state = RUN;
+            else
+                next_state = IDLE;
+
+        RUN:
+            if(fault_detect)
+                next_state = FAULT;
+            else
+                next_state = RUN;
+
+        FAULT:
+            next_state = RESET;
+
+        RESET:
+            next_state = IDLE;
+
+        default:
+            next_state = IDLE;
+
+    endcase
+end
+
+/////////////////////////////////////////////////
+// Output logic
+/////////////////////////////////////////////////
+
+always @(*) begin
+    pwm_enable = 0;
+    fault_flag = 0;
+
+    case(current_state)
+
+        IDLE: begin
+            pwm_enable = 0;
+        end
+
+        RUN: begin
+            pwm_enable = 1;
+        end
+
+        FAULT: begin
+            pwm_enable = 0;
+            fault_flag = 1;
+        end
+
+        RESET: begin
+            pwm_enable = 0;
+        end
+
+    endcase
+end
+
+endmodule
