@@ -1,4 +1,4 @@
-# Hackathon
+
 # Motor Control IP (Hackathon MVP) — 3‑Phase PWM + Protection + FPGA Results
 
 This repository contains an RTL **Motor Control IP** developed for the **Industrial & Automotive IP Development (Track B: Motor Control IP)** hackathon theme.
