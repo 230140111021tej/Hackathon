@@ -1,15 +1,15 @@
-
 # Motor Control IP (Hackathon MVP) — 3‑Phase PWM + Protection + FPGA Results
 
 This repository contains an RTL **Motor Control IP** developed for the **Industrial & Automotive IP Development (Track B: Motor Control IP)** hackathon theme.
 
-The IP provides a **functional MVP** featuring:
+The IP provides a functional MVP featuring:
 - **3‑phase PWM generation** (A/B/C phases)
 - **Configurable duty cycle and frequency**
+- **Deadtime insertion** for complementary high/low gate outputs
 - **Basic protection** (overcurrent + emergency stop)
-- **FPGA/ASIC‑oriented modular architecture** (Control Path + Data Path)
+- **Modular architecture** (**Control Path** + **Data Path**)
 - **Simulation testbench + waveform validation**
-- **FPGA implementation results (timing/power/resource)**
+- **FPGA implementation results** (timing/power/resource)
 
 ---
 
@@ -17,152 +17,119 @@ The IP provides a **functional MVP** featuring:
 
 | Requirement | Implemented? | Notes |
 |---|---:|---|
-| 3‑phase PWM generation | ✅ | Complementary `high/low` outputs for A/B/C |
-| Configurable duty cycle | ✅ | `duty_a_in`, `duty_b_in`, `duty_c_in` captured into registers |
-| Configurable frequency | ✅ | `freq_in` → `freq_div` sets counter maximum |
-| Basic protection logic | ✅ | `overcurrent` / `emergency_stop` produce `fault_detect`; PWM gated off |
+| 3‑phase PWM generation | ✅ | Complementary `high/low` outputs for phases A/B/C |
+| Configurable duty cycle | ✅ | `duty_a_in`, `duty_b_in`, `duty_c_in` captured into internal registers |
+| Configurable frequency | ✅ | `freq_in` → `freq_div` sets PWM counter maximum |
+| Basic protection logic | ✅ | `overcurrent` / `emergency_stop` create `fault_detect`; PWM is gated off |
 
 ---
 
-## 2. Top-Level Module
+## 2. Repository Structure
+
+- `Codes/`
+  - `Motor_Control_Top.v` — top-level integration
+  - `Control_Path/`
+    - `Sync_Block` — 2‑FF synchronizer
+    - `Protection_Unit` — fault detection
+    - `Control_Fsm` — FSM generating `pwm_enable` and `fault_flag`
+  - `Data_Path/`
+    - `Register_Bank` — stores duty/frequency/deadtime
+    - `Pwm_Engine` — counter + compare + deadtime
+    - `Sub_Modules/` — `pwm_counter`, `compare_logic`, `deadtime_block`
+- `Testbench` — simulation testbench (Icarus/Vivado compatible)
+- `LICENSE` — MIT
+
+---
+
+## 3. Block-Level Architecture (Control Path vs Data Path)
+
+### Data Path (signal flow)
+
+Configuration inputs → **Register Bank** → (duty_a/b/c, freq_div, deadtime) → **PWM Engine** → **PWM Counter** → counter_value → **Compare Logic** → pwm_a/b/c_raw → **Deadtime Blocks** → PWM outputs
+
+### Control Path (FSM flow)
+
+System reset → input synchronization (start / emergency_stop / overcurrent) → **IDLE** (pwm_enable=0)
+- If `start=1` → **RUN** (pwm_enable=1)
+- If fault detected → **FAULT** (pwm_enable=0, fault_flag=1) → **RESET** → back to **IDLE**
+
+### Cross-path signals
+
+- **Control Path → Data Path:** `pwm_enable`
+- **Control Path → Data Path (optional/config capture):** `control_in` (= synchronized start) into `register_bank`
+- **Data Path → Control Path:** none in current MVP (no datapath feedback signal)
+
+---
+
+## 4. Top-Level Module
 
 **Top module:** `motor_control_top`  
 File: `Codes/Motor_Control_Top.v`
 
 ### Inputs
-- `clk` : system clock  
-- `rst` : asynchronous reset
-- `start` : start/enable request (synchronized internally)
+- `clk` : system clock
+- `rst` : async reset
+- `start` : start request (synchronized internally)
 - `emergency_stop` : emergency stop input (synchronized internally)
-- `overcurrent` : fault input (synchronized internally)
-- `write_enable` : captures configuration into the register bank
-- `duty_a_in`, `duty_b_in`, `duty_c_in` : PWM duty settings (WIDTH bits)
-- `freq_in` : PWM period control / counter max (WIDTH bits)
-- `deadtime_in` : deadtime in **clock cycles** (WIDTH bits)
+- `overcurrent` : overcurrent input (synchronized internally)
+- `write_enable` : captures configuration registers
+- `duty_a_in`, `duty_b_in`, `duty_c_in` : duty settings
+- `freq_in` : PWM counter maximum
+- `deadtime_in` : deadtime (clock cycles)
 
 ### Outputs
-- `fault_flag` : fault indication from FSM
+- `fault_flag`
 - `pwm_a_high`, `pwm_a_low`
 - `pwm_b_high`, `pwm_b_low`
 - `pwm_c_high`, `pwm_c_low`
 
-### Key Behavior
-- Async inputs are synchronized using a 2‑FF synchronizer.
-- Configuration registers update when `write_enable = 1`.
-- PWM enable is controlled by the FSM and blocked by protection:
+### Key behavior
+- Async inputs are synchronized using `sync_block`.
+- `protection_unit` detects and latches faults.
+- `control_fsm` controls run/fault state.
+- Final PWM enable:
   - `pwm_enable = fsm_pwm_enable & ~fault_detect`
 
 ---
 
-## 3. Architecture Overview (Control Path vs Data Path)
+## 5. PWM Operation Details
 
-### Control Path
-Located in: `Codes/Control_Path/`
+### Raw PWM generation
+- For each phase: `pwm_raw = (counter < duty)` (edge-aligned PWM)
 
-- **`sync_block`**  
-  2‑flip‑flop synchronizer for async inputs (`start`, `overcurrent`, `emergency_stop`).
-
-- **`protection_unit`**  
-  Detects and latches fault when:
-  - `overcurrent == 1` OR `emergency_stop == 1`  
-  Fault is used to disable PWM.
-
-- **`control_fsm`**  
-  Simple FSM with states such as `IDLE`, `RUN`, `FAULT`, `RESET` to drive:
-  - `pwm_enable`
-  - `fault_flag`
-
-### Data Path
-Located in: `Codes/Data_Path/`
-
-- **`register_bank`**  
-  Captures and stores:
-  - `duty_a`, `duty_b`, `duty_c`
-  - `freq_div`
-  - `deadtime`
-  - `control_reg`
-
-- **`pwm_engine`**  
-  Generates PWM in stages:
-  1. `pwm_counter` creates a ramp counter from 0..`freq_div`
-  2. `compare_logic` generates raw PWM (`pwm_*_raw`) using `(counter < duty)`
-  3. `deadtime_block` produces complementary `high/low` outputs with deadtime
-
----
-
-## 4. PWM Operation Details
-
-### Raw PWM (per phase)
-For each phase:
-- `pwm_raw = 1` when `counter < duty`
-- `pwm_raw = 0` otherwise
-
-This produces **edge-aligned PWM**.
-
-### Counter / Frequency
-- The counter counts upward while enabled.
-- It resets to `0` when `count >= freq_div`.
-- Therefore the PWM period is approximately **(freq_div + 1) clock cycles**.
+### Counter / frequency
+- Counter runs from 0 upward and resets when `count >= freq_div`.
+- PWM period is approximately `(freq_div + 1)` clock cycles.
 
 ### Deadtime
-- `deadtime` is specified in **clock cycles**.
-- The `deadtime_block` holds both outputs OFF for the programmed deadtime during switching, then enables the complementary output.
+- `deadtime` is specified in clock cycles.
+- Deadtime block ensures a gap where both outputs are OFF during switching.
 
 ---
 
-## 5. Verification (Testbench + Waveforms)
+## 6. Verification
 
-A simulation testbench is included to validate:
-- FSM transitions (`IDLE` → `RUN` → `FAULT` behavior)
-- Fault response (PWM disabled on `overcurrent` / `emergency_stop`)
-- Counter behavior vs `freq_div`
-- Duty cycle comparison output (`pwm_*_raw`)
-- Deadtime behavior (`pwm_*_high`, `pwm_*_low` never overlap; deadtime gap visible)
+A simulation testbench is included in the file: `Testbench`.
 
-**Waveform evidence:**  
-The provided waveforms show:
-- State transitions and fault handling (`fault_detect`, `fault_flag`, `pwm_enable`)
-- PWM generation chain (counter → raw PWM → high/low with deadtime)
-- Register updates through `write_enable`
-- Synchronizer behavior (`async_in` → `sync_ff1` → `sync_out`)
+What it tests:
+- Reset
+- Configuration load (`write_enable`)
+- Start/run PWM
+- Duty updates while running
+- Frequency changes
+- Overcurrent fault behavior
+- Emergency stop behavior
 
-> Note: If you are submitting to a judging panel, include these waveform screenshots in your report/PPT as proof of functional correctness.
+Waveform evidence (VCD) is generated:
+- `motor_control.vcd`
 
 ---
 
-## 6. FPGA Implementation Results (Vivado)
+## 7. How to Run Simulation
 
-### Resource Utilization (Implementation)
-- **LUT:** ~**87**
-- **FF:** ~**84**
-- **BRAM:** **0**
-- **DSP:** **0**
-- (Very compact logic footprint suitable for scaling or integration.)
+### Icarus Verilog (example)
 
-### Timing (Implemented Design)
-- **WNS (Setup):** **+4.671 ns**
-- **TNS:** **0.000 ns**
-- **Failing endpoints:** **0**
-- **WHS (Hold):** **+0.183 ns**
-- **Pulse width slack:** **+4.500 ns**
-- Result: **All user-specified timing constraints are met.**
-
-### Power (Implemented Design)
-- **Total on‑chip power:** **0.076 W**
-  - **Static:** **0.072 W (94%)**
-  - **Dynamic:** **0.004 W (6%)**
-- Dynamic power breakdown indicates I/O dominates dynamic portion.
-- **Power confidence level:** Low (vectorless estimation / limited activity data).
-
-### Notes on Vivado Warnings
-Vivado reports warnings mainly related to missing I/O delay constraints (TIMING‑18) and configuration voltage properties (CFGBVS/CONFIG_VOLTAGE). These are **constraints / board setup items**, not functional RTL errors.
-
----
-
-## 7. How to Run (Simulation)
-
-### Option A: Icarus Verilog (example)
-Update paths to match your repo layout.
+> Note: file extensions in this repo may be mixed (`.v` and no-extension). Update paths to match your local checkout.
 
 ```sh
 iverilog -g2012 -o sim.out \
@@ -175,31 +142,52 @@ iverilog -g2012 -o sim.out \
   Codes/Data_Path/Sub_Modules/pwm_counter.v \
   Codes/Data_Path/Sub_Modules/compare_logic.v \
   Codes/Data_Path/Sub_Modules/deadtime_block.v \
-  tb/tb_motor_control_top.v
+  Testbench
 
 vvp sim.out
+# view waveform:
+# gtkwave motor_control.vcd
 ```
 
-### Option B: Vivado Simulation
-- Add all RTL files + testbench in Vivado
+### Vivado Simulation
+- Add RTL + `Testbench`
 - Run Behavioral Simulation
-- Observe waveforms for PWM, faults, and deadtime
+- Inspect waveforms for PWM/enable/fault/deadtime
 
 ---
 
-## 8. Roadmap (Advanced Enhancements)
-Conceptual roadmap beyond MVP (for industrial / EV‑grade motor control IP):
-- Sensorless control (Back‑EMF observer / PLL / SMO)
-- Torque estimation (current + speed + motor model)
-- Closed-loop architecture (current loop + speed loop; PI controllers)
-- Improved fault handling:
-  - sticky fault registers, explicit fault clear
-  - undervoltage/overvoltage/thermal faults
-- Standard register interface for integration:
-  - AXI‑Lite / APB / Wishbone
-- Add formal checks / assertions + functional coverage
+## 8. FPGA Implementation Results (Vivado)
+
+### Resource utilization (implementation)
+- LUT: ~87
+- FF: ~84
+- BRAM: 0
+- DSP: 0
+
+### Timing summary (implemented)
+- WNS (setup): +4.671 ns
+- TNS: 0.000 ns
+- Failing endpoints: 0
+- WHS (hold): +0.183 ns
+- WPWS (pulse width slack): +4.500 ns
+
+### Power summary (implemented)
+- Total on-chip power: 0.076 W
+  - Static: 0.072 W (94%)
+  - Dynamic: 0.004 W (6%)
+
+---
+
+## 9. Roadmap (Advanced Enhancements)
+
+- Sensorless control strategy
+- Torque estimation
+- Closed-loop control (current + speed loops)
+- Enhanced fault handling (sticky faults, fault codes, explicit clear)
+- Standard configuration/register interface (AXI-lite/APB/Wishbone)
 
 ---
 
 ## License
+
 MIT License — see `LICENSE`.
