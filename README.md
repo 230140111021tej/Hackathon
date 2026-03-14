@@ -37,6 +37,16 @@ This repository contains an RTL **Motor Control IP** implementing a functional M
 ### Power Summary
 ![Power Report](Images/Power_report.png)
 
+### Key Results (from Vivado screenshots)
+| Metric | Value |
+|---|---:|
+| LUT | ~87 |
+| FF | ~84 |
+| BRAM / DSP | 0 / 0 |
+| WNS (setup) | +4.671 ns |
+| WHS (hold) | +0.183 ns |
+| Total On‑Chip Power | 0.076 W |
+
 ---
 
 ## 3) Hackathon MVP Requirements Checklist (Track B)
@@ -68,12 +78,6 @@ This repository contains an RTL **Motor Control IP** implementing a functional M
 │        ├─ Deadtime_Block
 │        └─ Pwm_Counter
 ├─ Images/
-│  ├─ design_runs.png
-│  ├─ Timing_report.png
-│  ├─ Power_report.png
-│  ├─ data_path_vs_control_path.jpeg
-│  ├─ data_path.jpeg
-│  └─ control_path.jpeg
 ├─ Testbench
 ├─ README.md
 └─ LICENSE
@@ -86,21 +90,20 @@ This repository contains an RTL **Motor Control IP** implementing a functional M
 ## 5) Top-Level Module
 
 **Top module:** `motor_control_top`  
-**File:** `Codes/Motor_Control_Top.v`  
+**RTL file:** `Codes/Motor_Control_Top.v`  
+**Testbench file:** `Testbench`  
 **Parameter:** `WIDTH` (default: 12)
 
-### Inputs
-- `clk` : system clock  
-- `rst` : async reset  
-- `start` : start request (synchronized internally)  
-- `emergency_stop` : emergency stop (synchronized internally)  
-- `overcurrent` : overcurrent fault (synchronized internally)  
-- `write_enable` : captures configuration registers  
-- `duty_a_in`, `duty_b_in`, `duty_c_in` : duty settings (`WIDTH` bits)  
-- `freq_in` : PWM counter maximum (`WIDTH` bits)  
-- `deadtime_in` : deadtime in clock cycles (`WIDTH` bits)
+### Ports (Quick Summary)
 
-### Outputs
+**Inputs**
+- `clk`, `rst`
+- `start`, `emergency_stop`, `overcurrent`
+- `write_enable`
+- `duty_a_in`, `duty_b_in`, `duty_c_in`
+- `freq_in`, `deadtime_in`
+
+**Outputs**
 - `fault_flag`
 - `pwm_a_high`, `pwm_a_low`
 - `pwm_b_high`, `pwm_b_low`
@@ -111,10 +114,10 @@ This repository contains an RTL **Motor Control IP** implementing a functional M
 ## 6) How the IP Works (Simple)
 
 ### Data Path (PWM Generation)
-1. `Register_Bank` stores duty/frequency/deadtime on `write_enable`
+1. `Register_Bank` stores duty/frequency/deadtime when `write_enable=1`
 2. `Pwm_Counter` counts from `0` to `freq_div`
 3. `Compare_Logic` generates raw PWM: `pwm_raw = (counter < duty)`
-4. `Deadtime_Block` produces complementary `high/low` with deadtime
+4. `Deadtime_Block` produces complementary `high/low` outputs with deadtime
 
 ### Control Path (Safety + Enable)
 1. Async inputs are synchronized (`Sync_Block`)
@@ -144,9 +147,11 @@ A simulation testbench is included in `Testbench`.
 
 ---
 
-## 8) How to Run Simulation
+## 8) How to Run Simulation (Icarus Verilog)
 
-### Icarus Verilog (example)
+> IMPORTANT: `Testbench` contains `` `include "h.v" ``.  
+> Make sure `h.v` exists in your simulation directory, or remove that include if not required.
+
 ```sh
 iverilog -g2012 -o sim.out \
   Codes/Motor_Control_Top.v \
@@ -167,7 +172,13 @@ vvp sim.out
 
 ---
 
-## 9) Roadmap (Advanced Enhancements)
+## 9) Known Notes / Limitations (Current MVP)
+- Configuration is via parallel inputs + `write_enable` (no AXI/APB register bus yet).
+- `fault_flag` is FSM-based and may be a short pulse depending on fault timing; PWM gating is handled by `fault_detect`.
+
+---
+
+## 10) Roadmap (Advanced Enhancements)
 - Sensorless control strategy (observer / PLL / SMO)
 - Torque estimation algorithm
 - Closed-loop architecture (current loop + speed loop)
@@ -176,5 +187,5 @@ vvp sim.out
 
 ---
 
-## 10) License
+## 11) License
 MIT License — see `LICENSE`.
