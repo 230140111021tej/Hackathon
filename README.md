@@ -1,37 +1,56 @@
 # Motor Control IP (Hackathon MVP) — 3‑Phase PWM + Protection + FPGA Proof
 
 **Hackathon Theme:** Industrial & Automotive IP Development  
-**Track:** **B — Motor Control IP**  
-**Repo:** `230140111021tej/Hackathon`
+**Track:** **B — Motor Control IP**
 
-This repository contains an RTL **Motor Control IP** implementing a functional MVP for industrial/EV-style motor-drive subsystems. The core delivers **3‑phase PWM generation** with **configurable duty/frequency**, **deadtime insertion**, and **basic protection** (overcurrent + emergency stop), along with **simulation verification** and **FPGA implementation proof**.
-
----
-
-## Quick Links (Proof & Diagrams)
-- **Data Path vs Control Path:** `Images/data_path_vs_control_path.jpeg`
-- **Data Path diagram:** `Images/data_path.jpeg`
-- **Control Path diagram:** `Images/control_path.jpeg`
-- **Vivado design run status:** `Images/design_runs.png`
-- **Timing report screenshot:** `Images/Timing_report.png`
-- **Power report screenshot:** `Images/Power_report.png`
-
-> Tip: If you open this repo in GitHub, check the `Images/` folder to see the screenshots used for submission evidence.
+This repository contains an RTL **Motor Control IP** implementing a functional MVP for motor-drive subsystems:
+- **3‑phase PWM generation** (A/B/C)
+- **Configurable duty cycle + frequency**
+- **Deadtime insertion** for complementary high/low outputs
+- **Basic protection**: `overcurrent` + `emergency_stop`
+- **Simulation testbench + waveform dump**
+- **FPGA implementation proof** (Vivado timing/power/utilization screenshots)
 
 ---
 
-## MVP Requirements Checklist (Track B)
+## 1) What the judges should see first (Proof)
+
+### Architecture Overview (Control Path vs Data Path)
+![Data Path vs Control Path](Images/data_path_vs_control_path.jpeg)
+
+### Data Path (PWM generation chain)
+![Data Path](Images/data_path.jpeg)
+
+### Control Path (FSM + Protection)
+![Control Path](Images/control_path.jpeg)
+
+---
+
+## 2) FPGA Implementation Proof (Vivado)
+
+### Design Runs (Synthesis + Implementation complete)
+![Design Runs](Images/design_runs.png)
+
+### Timing Summary
+![Timing Report](Images/Timing_report.png)
+
+### Power Summary
+![Power Report](Images/Power_report.png)
+
+---
+
+## 3) Hackathon MVP Requirements Checklist (Track B)
 
 | Requirement | Implemented? | Notes |
 |---|---:|---|
 | 3‑phase PWM generation | ✅ | Complementary `high/low` outputs for phases A/B/C |
-| Configurable duty cycle | ✅ | `duty_a_in`, `duty_b_in`, `duty_c_in` captured into registers |
-| Configurable frequency | ✅ | `freq_in` → `freq_div` controls PWM counter maximum |
-| Basic protection logic | ✅ | `overcurrent` / `emergency_stop` create `fault_detect`; PWM gated off |
+| Configurable duty cycle | ✅ | `duty_a_in/b_in/c_in` captured into registers |
+| Configurable frequency | ✅ | `freq_in` → `freq_div` controls PWM counter max |
+| Basic protection logic | ✅ | `overcurrent` / `emergency_stop` generate `fault_detect`; PWM gated off |
 
 ---
 
-## Repository Structure
+## 4) Repository Structure
 
 ```
 .
@@ -60,11 +79,11 @@ This repository contains an RTL **Motor Control IP** implementing a functional M
 └─ LICENSE
 ```
 
-> Note: Some RTL files in this repo intentionally have **no `.v` extension** (e.g., `Control_Fsm`). They are still Verilog modules and can be compiled by explicitly listing the file paths.
+> Note: Some RTL files in this repo intentionally have **no `.v` extension** (e.g., `Control_Fsm`). They are Verilog modules and compile correctly when explicitly listed.
 
 ---
 
-## Top-Level Module
+## 5) Top-Level Module
 
 **Top module:** `motor_control_top`  
 **File:** `Codes/Motor_Control_Top.v`  
@@ -89,68 +108,43 @@ This repository contains an RTL **Motor Control IP** implementing a functional M
 
 ---
 
-## Architecture (Control Path + Data Path)
+## 6) How the IP Works (Simple)
 
-### Control Path (`Codes/Control_Path/`)
-- **`Sync_Block`**: 2‑FF synchronizer for async inputs
-- **`Protection_Unit`**: detects faults from `overcurrent` or `emergency_stop`
-- **`Control_Fsm`**: FSM generating `pwm_enable` and `fault_flag`
+### Data Path (PWM Generation)
+1. `Register_Bank` stores duty/frequency/deadtime on `write_enable`
+2. `Pwm_Counter` counts from `0` to `freq_div`
+3. `Compare_Logic` generates raw PWM: `pwm_raw = (counter < duty)`
+4. `Deadtime_Block` produces complementary `high/low` with deadtime
 
-### Data Path (`Codes/Data_Path/`)
-- **`Register_Bank`**: stores `duty_a/b/c`, `freq_div`, `deadtime`, `control_reg` on `write_enable`
-- **`Pwm_Engine`**:
-  - `Sub_Modules/Pwm_Counter` → counter generation up to `freq_div`
-  - `Sub_Modules/Compare_Logic` → raw PWM: `(counter < duty_x)`
-  - `Sub_Modules/Deadtime_Block` → complementary outputs with deadtime
-
-### Cross-path signals
-- **Control → Data:** `pwm_enable`
-- **Control → Data (config capture in this MVP):** `control_in` (= synchronized `start`) into `Register_Bank`
-- **Data → Control:** none in current MVP
+### Control Path (Safety + Enable)
+1. Async inputs are synchronized (`Sync_Block`)
+2. `Protection_Unit` detects fault from `overcurrent` / `emergency_stop`
+3. `Control_Fsm` enables PWM in RUN state and raises `fault_flag` in FAULT state
+4. PWM is gated off during fault:
+   - `pwm_enable = fsm_pwm_enable & ~fault_detect`
 
 ---
 
-## PWM Operation Details
+## 7) Verification (Simulation)
 
-### Raw PWM generation
-For each phase:
-- `pwm_raw = (counter < duty)` (**edge-aligned PWM**)
+A simulation testbench is included in `Testbench`.
 
-### Frequency control
-- `pwm_counter` counts from 0 upward and resets when `count >= freq_div`
-- PWM period ≈ **(freq_div + 1)** clock cycles
-
-### Deadtime
-- `deadtime_in` is specified in **clock cycles**
-- `Deadtime_Block` enforces a switching gap where both complementary outputs are OFF
-
----
-
-## Verification (Simulation)
-
-A simulation testbench is included in the file: `Testbench`.
-
-### What the testbench exercises
-- Reset behavior
-- Register/config load via `write_enable`
+### What it tests
+- Reset
+- Register/config load (`write_enable`)
 - Start/run PWM
-- Duty updates during run
-- Frequency changes (including extreme change)
-- Fault behavior:
-  - Overcurrent fault test
-  - Emergency stop test
-- Restart after fault stimulus
-- Corner cases:
-  - duty = 0
-  - duty = max (`4095` for WIDTH=12)
-  - larger deadtime
+- Duty updates while running
+- Frequency changes
+- Overcurrent fault behavior
+- Emergency stop behavior
+- Corner cases: duty=0, duty=max, deadtime stress
 
-### Waveform output
-- VCD dump file: **`motor_control.vcd`**
+### Output
+- VCD waveform dump: **`motor_control.vcd`**
 
 ---
 
-## How to Run Simulation
+## 8) How to Run Simulation
 
 ### Icarus Verilog (example)
 ```sh
@@ -167,56 +161,20 @@ iverilog -g2012 -o sim.out \
   Testbench
 
 vvp sim.out
-# view waveform:
+# View waveform:
 # gtkwave motor_control.vcd
 ```
 
-### Vivado Simulation
-- Add all RTL files + `Testbench`
-- Run Behavioral Simulation
-- Inspect waveforms for: PWM outputs, `pwm_enable`, `fault_flag`, `fault_detect`, deadtime behavior
-
 ---
 
-## FPGA Implementation Results (Vivado) — Evidence in `Images/`
-
-### Resource utilization (implementation)
-- **LUT:** ~87  
-- **FF:** ~84  
-- **BRAM:** 0  
-- **DSP:** 0  
-
-### Timing summary (implemented)
-- **WNS (setup):** +4.671 ns  
-- **TNS:** 0.000 ns  
-- **Failing endpoints:** 0  
-- **WHS (hold):** +0.183 ns  
-- **WPWS (pulse width slack):** +4.500 ns  
-
-### Power summary (implemented)
-- **Total on-chip power:** 0.076 W  
-  - Static: 0.072 W (94%)  
-  - Dynamic: 0.004 W (6%)
-
----
-
-## Roadmap (Advanced Enhancements)
-Planned upgrades beyond MVP:
-- Sensorless control strategy (observer/PLL/SMO)
+## 9) Roadmap (Advanced Enhancements)
+- Sensorless control strategy (observer / PLL / SMO)
 - Torque estimation algorithm
 - Closed-loop architecture (current loop + speed loop)
-- Enhanced fault handling:
-  - sticky faults, fault codes, explicit fault clear
-- Standard config/register interface for integration:
-  - AXI‑Lite / APB / Wishbone
+- Enhanced fault handling (sticky faults, fault codes, explicit clear)
+- Standard configuration/register interface (AXI‑Lite / APB / Wishbone)
 
 ---
 
-## Known Notes / Limitations (Current MVP)
-- Configuration is loaded using parallel inputs + `write_enable` (no bus protocol yet).
-- Some RTL files do not use `.v` extension; compilation requires explicit file listing.
-
----
-
-## License
+## 10) License
 MIT License — see `LICENSE`.
