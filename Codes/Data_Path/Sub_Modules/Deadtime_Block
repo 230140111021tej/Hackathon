@@ -22,23 +22,21 @@ always @(posedge clk or posedge rst) begin
     end
     else begin
 
-        if (pwm_in == 1'b1) begin
-            pwm_high <= 1;
-            pwm_low  <= 0;
-            dead_counter <= deadtime;
-        end
-        else begin
-            if (dead_counter > 0) begin
-                dead_counter <= dead_counter - 1;
-                pwm_high <= 0;
-                pwm_low  <= 0;
-            end
-            else begin
-                pwm_high <= 0;
-                pwm_low  <= 1;
-            end
-        end
-
+   if (pwm_in == 1'b1) begin
+    pwm_high <= 1;
+    pwm_low  <= 0;
+    dead_counter <= deadtime;
+end else begin
+    if (dead_counter > 0) begin
+        dead_counter <= dead_counter - 1;
+        pwm_high <= 0;
+        pwm_low  <= 0;
+    end else begin
+        pwm_high <= 0;
+        pwm_low  <= 1;
+    end
+end
+     
     end
 end
 
