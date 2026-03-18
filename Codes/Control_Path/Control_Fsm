@@ -29,7 +29,7 @@ always @(posedge clk or posedge rst) begin
 end
 
 /////////////////////////////////////////////////
-// Next state logic
+// Next state logic (UPDATED)
 /////////////////////////////////////////////////
 
 always @(*) begin
@@ -47,8 +47,12 @@ always @(*) begin
             else
                 next_state = RUN;
 
-        FAULT:
-            next_state = RESET;
+        // 🔥 FIX: Hold FAULT until user resets
+      FAULT:
+    if(rst)                 // manual reset button
+        next_state = RESET;
+    else
+        next_state = FAULT;
 
         RESET:
             next_state = IDLE;
@@ -79,7 +83,7 @@ always @(*) begin
 
         FAULT: begin
             pwm_enable = 0;
-            fault_flag = 1;
+            fault_flag = 1;   // stays HIGH now ✔
         end
 
         RESET: begin
